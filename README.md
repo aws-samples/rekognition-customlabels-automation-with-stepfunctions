@@ -19,22 +19,20 @@ This workflow will be deployed to Step functions in the selected region. You can
 
 ![Architecture](/assets/workflow.jpg)
 
+## Prerequsites
+
+Before deploying the workflow, we need to create the existing training and validation datasets. To do that,
+
+- First, create an Amazon Rekognition project. You can follow the steps [here](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/mp-create-project.html) to create the project.
+- Then, create the training and validation datasets. You can follow the steps [here](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/creating-datasets.html) to create the datasets.
+- Finally, install AWS SAM CLI. You can follow steps [here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html).
+
 ## Deploy the sample application
-
-To deploy this application, you will need an existing dataset in Amazon Rekognition which can be copied to our new project that the workflow creates. You can create this dataset manually by importing images from one of the following locations.
-
-- Amazon S3 bucket
-- Local computer
-- Amazon SageMaker Ground Truth
-
-[Here](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/md-create-dataset.html) is more information on creating a dataset manually.
-
-After creating the dataset, you can then build and deploy this application.
 
 To build and deploy your application for the first time, run the following in your shell:
 
 ```bash
-sam build --use-container
+sam build
 sam deploy --guided
 ```
 
@@ -65,3 +63,5 @@ To delete the sample application that you created, use the AWS CLI. Assuming you
 ```bash
 aws sam delete --stack-name <stack-name>
 ```
+
+To delete the Amazon Rekognition Custom Labels model, navigate to the Amazon Rekognition console and follow [these](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/tm-delete-model.html#tm-delete-model-console) instructions. Alternatively, you can use the AWS SDK to [delete](https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/tm-delete-model.html#tm-delete-model-sdk) the model.
