@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  rekognition-training-pipeline
+
+  Sample SAM Template for rekognition-training-pipeline
+
+Parameters:
+  TrainingDatasetArnToCopyFrom:
+    Description: ARN of the training dataset to copy our dataset from 
+    Type: String
+  TestDatasetArnToCopyFrom:
+    Description: ARN of the test dataset to copy our dataset from 
+    Type: String
+  OutputBucketName: 
+    Description: Exisiting Output bucket name for storing model artifacts
+    Type: String
+    
+
+Resources:
+  RekognitionStateMachine:
+    Type: AWS::Serverless::StateMachine # More info about State Machine Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html
+    Properties:
+      DefinitionUri: statemachine/workflow.yaml
+      DefinitionSubstitutions:
+        TestDatasetArn: !Ref TestDatasetArnToCopyFrom
+        TrainingDatasetArn: !Ref TrainingDatasetArnToCopyFrom   
+        OutputBucket: !Ref OutputBucketName
+      Policies: # Find out more about SAM policy templates: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-templates.html
+        - S3CrudPolicy: 
+            BucketName: !Ref OutputBucketName
+        - Version: '2012-10-17' # See https://docs.aws.amazon.com/step-functions/latest/dg/cw-logs.html for more details on Step Functions logging using CloudWatch Logs
+          Statement:
+          - Effect: Allow
+            Action:
+                - "s3:ListBucket"
+                - "s3:ListAllMyBuckets"
+                - "s3:GetBucketAcl"
+                - "s3:GetBucketLocation"
+                - "s3:GetObject"
+                - "s3:GetObjectAcl"
+                - "s3:GetObjectTagging"
+                - "s3:GetObjectVersion"
+                - "s3:PutObject"
+            Resource: 
+              - "arn:aws:s3:::*custom-labels*"
+          - Effect: Allow
+            Action: 
+                - "rekognition:CreateProject"
+                - "rekognition:CreateProjectVersion"
+                - "rekognition:StartProjectVersion"
+                - "rekognition:StopProjectVersion"
+                - "rekognition:DescribeProjects"
+                - "rekognition:DescribeProjectVersions"
+                - "rekognition:DetectCustomLabels"
+                - "rekognition:DeleteProject"
+                - "rekognition:DeleteProjectVersion"
+                - "rekognition:TagResource"
+                - "rekognition:UntagResource"
+                - "rekognition:ListTagsForResource"
+                - "rekognition:CreateDataset"
+                - "rekognition:ListDatasetEntries"
+                - "rekognition:ListDatasetLabels"
+                - "rekognition:DescribeDataset"
+                - "rekognition:UpdateDatasetEntries"
+                - "rekognition:DistributeDatasetEntries"
+                - "rekognition:DeleteDataset"
+                - "rekognition:CopyProjectVersion"
+                - "rekognition:PutProjectPolicy"
+                - "rekognition:ListProjectPolicies"
+                - "rekognition:DeleteProjectPolicy"
+            Resource: "*"
+
+Outputs:
+  RekognitionStateMachineArn:
+    Description: "Rekognition training State machine ARN"
+    Value: !Ref RekognitionStateMachine
+

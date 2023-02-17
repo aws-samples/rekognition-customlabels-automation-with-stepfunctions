@@ -1,0 +1,147 @@
+Comment: A pipeline/workflow to create dataset, train a custom clasification model and deploy model on Amazon Rekognition
+StartAt: CreateProject
+States:
+  CreateProject:
+    Type: Task
+    Parameters:
+      ProjectName: DetectCarColorSF-1
+    Resource: arn:aws:states:::aws-sdk:rekognition:createProject
+    Next: Parallel
+    ResultPath: $.Input
+  Parallel:
+    Type: Parallel
+    Branches:
+      - StartAt: CreateTrainDataset
+        States:
+          CreateTrainDataset:
+            Type: Task
+            Parameters:
+              DatasetType: TRAIN
+              ProjectArn.$: $.Input.ProjectArn
+              DatasetSource:
+                DatasetArn: >-
+                  ${TrainingDatasetArn}
+            Resource: arn:aws:states:::aws-sdk:rekognition:createDataset
+            Next: DescribeTrainDataset
+            ResultPath: $.CreateDatasetResult
+          DescribeTrainDataset:
+            Type: Task
+            Parameters:
+              DatasetArn.$: $.CreateDatasetResult.DatasetArn
+            Resource: arn:aws:states:::aws-sdk:rekognition:describeDataset
+            ResultPath: $.DescribeDatasetResult
+            Next: Is training Dataset created?
+          Is training Dataset created?:
+            Type: Choice
+            Choices:
+              - Variable: $.DescribeDatasetResult.DatasetDescription.Status
+                StringMatches: CREATE_COMPLETE
+                Next: Train data set created
+              - Variable: $.DescribeDatasetResult.DatasetDescription.Status
+                StringMatches: CREATE_FAILED
+                Next: Failed to create train dataset
+            Default: Wait for train dataset to be created
+          Wait for train dataset to be created:
+            Type: Wait
+            Seconds: 5
+            Next: DescribeTrainDataset
+          Train data set created:
+            Type: Pass
+            End: true
+          Failed to create train dataset:
+            Type: Fail
+      - StartAt: CreateTestDataset
+        States:
+          CreateTestDataset:
+            Type: Task
+            Parameters:
+              DatasetType: TEST
+              ProjectArn.$: $.Input.ProjectArn
+              DatasetSource:
+                DatasetArn: ${TestDatasetArn}
+            Resource: arn:aws:states:::aws-sdk:rekognition:createDataset
+            Next: DescribeTestDataset
+            ResultPath: $.CreateDatasetResult
+          DescribeTestDataset:
+            Type: Task
+            Parameters:
+              DatasetArn.$: $.CreateDatasetResult.DatasetArn
+            Resource: arn:aws:states:::aws-sdk:rekognition:describeDataset
+            ResultPath: $.DescribeDatasetResult
+            Next: Is Test dataset created?
+          Is Test dataset created?:
+            Type: Choice
+            Choices:
+              - Variable: $.DescribeDatasetResult.DatasetDescription.Status
+                StringMatches: CREATE_COMPLETE
+                Next: Test dataset created
+              - Variable: $.DescribeDatasetResult.DatasetDescription.Status
+                StringMatches: CREATE_FAILED
+                Next: Failed to create test dataset
+            Default: Wait for test dataset to be created
+          Test dataset created:
+            Type: Pass
+            End: true
+          Wait for test dataset to be created:
+            Type: Wait
+            Seconds: 5
+            Next: DescribeTestDataset
+          Failed to create test dataset:
+            Type: Fail
+    Next: Train Model
+    ResultSelector:
+      ProjectArn.$: $.[0].Input.ProjectArn
+      DataBucket: ${OutputBucket}
+  Train Model:
+    Type: Task
+    Parameters:
+      OutputConfig:
+        S3Bucket.$: $.DataBucket
+        S3KeyPrefix: vehicleColorOutput
+      ProjectArn.$: $.ProjectArn
+      VersionName: version1
+    Resource: arn:aws:states:::aws-sdk:rekognition:createProjectVersion
+    Next: Get Model Training Status
+    ResultPath: $.ModelTrainResult
+  Get Model Training Status:
+    Type: Task
+    Next: Is Model Training Complete?
+    Parameters:
+      ProjectArn.$: $.ProjectArn
+    Resource: arn:aws:states:::aws-sdk:rekognition:describeProjectVersions
+    ResultPath: $.ModelTrainingStatus
+  Is Model Training Complete?:
+    Type: Choice
+    Choices:
+      - Variable: $.ModelTrainingStatus.ProjectVersionDescriptions[0].Status
+        StringMatches: TRAINING_COMPLETED
+        Next: Check Model Score
+      - Variable: $.ModelTrainingStatus.ProjectVersionDescriptions[0].Status
+        StringMatches: TRAINING_FAILED
+        Next: Model training failed
+    Default: Wait for training to complete
+  Check Model Score:
+    Type: Choice
+    Choices:
+      - Variable: $.EvaluationResult.F1Score
+        NumericGreaterThanEquals: 0.85
+        Next: F1 score > 0.85, deploy model
+    Default: F1 score < 0.85
+    InputPath: $.ModelTrainingStatus.ProjectVersionDescriptions[0]
+  F1 score > 0.85, deploy model:
+    Type: Task
+    End: true
+    Parameters:
+      MinInferenceUnits: 1
+      ProjectVersionArn.$: $.ProjectVersionArn
+    Resource: arn:aws:states:::aws-sdk:rekognition:startProjectVersion
+  F1 score < 0.85:
+    Type: Pass
+    End: true
+    Comment: 'F1 score is less than 0.85 - domain expertise needed. '
+  Wait for training to complete:
+    Type: Wait
+    Seconds: 900
+    Next: Get Model Training Status
+  Model training failed:
+    Type: Fail
